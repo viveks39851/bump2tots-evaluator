@@ -10,9 +10,8 @@
     <div id="root"></div>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
     
-    <script type="text/babel">
+    <script>
         const { useState } = React;
 
         function App() {
@@ -24,6 +23,25 @@
             const [currentM, setCurrentM] = useState(0);
             const [ratings, setRatings] = useState({});
 
+            const parseCSVLine = (line) => {
+                const cells = [];
+                let current = '';
+                let inQuotes = false;
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+                    if (char === '"') {
+                        inQuotes = !inQuotes;
+                    } else if (char === ',' && !inQuotes) {
+                        cells.push(current.trim().replace(/^"(.*)"$/, '$1'));
+                        current = '';
+                    } else {
+                        current += char;
+                    }
+                }
+                cells.push(current.trim().replace(/^"(.*)"$/, '$1'));
+                return cells;
+            };
+
             const handleUpload = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -33,15 +51,20 @@
                     const lines = csv.split('\n').filter(l => l.trim());
                     const header = lines[0].split(',').map(h => h.trim());
                     
-                    const qIdx = header.findIndex(h => h.includes('Question'));
-                    const sIdx = header.findIndex(h => h.includes('Speciality'));
-                    const gptIdx = header.findIndex(h => h.includes('GPT'));
-                    const gemIdx = header.findIndex(h => h.includes('Gemini'));
-                    const cIdx = header.findIndex(h => h.includes('Claude'));
-                    const bIdx = header.findIndex(h => h.includes('Bump2Tots'));
+                    const qIdx = header.findIndex(h => h.toLowerCase().includes('question'));
+                    const sIdx = header.findIndex(h => h.toLowerCase().includes('speciality'));
+                    const gptIdx = header.findIndex(h => h.toLowerCase().includes('gpt'));
+                    const gemIdx = header.findIndex(h => h.toLowerCase().includes('gemini'));
+                    const cIdx = header.findIndex(h => h.toLowerCase().includes('claude'));
+                    const bIdx = header.findIndex(h => h.toLowerCase().includes('bump2tots'));
+
+                    if ([qIdx, sIdx, gptIdx, gemIdx, cIdx, bIdx].includes(-1)) {
+                        alert('Missing required columns');
+                        return;
+                    }
 
                     const parsed = lines.slice(1).map((line, idx) => {
-                        const cells = line.split(',');
+                        const cells = parseCSVLine(line);
                         const models = [
                             { name: 'ChatGPT', text: cells[gptIdx] || '' },
                             { name: 'Gemini', text: cells[gemIdx] || '' },
@@ -69,7 +92,7 @@
                 return (
                     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
                         <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-8">
-                            <h1 className="text-3xl font-bold text-gray-900 mb-6">Bump2Tots Evaluator</h1>
+                            <h1 className="text-3xl font-bold text-gray-900 mb-6">Bump2Tots Response Evaluator</h1>
                             
                             {!questions ? (
                                 <label className="block">
@@ -87,29 +110,40 @@
                                             placeholder="Dr. Name"
                                             value={evaluatorName}
                                             onChange={(e) => setEvaluatorName(e.target.value)}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600"
                                         />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-bold text-gray-900 mb-3">Specialty</label>
-                                        {['OB/MFM', 'Peds/Neo'].map(s => (
-                                            <button
-                                                key={s}
-                                                onClick={() => setSpecialty(s)}
-                                                className={`w-full py-2 px-4 mb-2 rounded-lg font-bold ${
-                                                    specialty === s ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-900'
-                                                }`}
-                                            >
-                                                {s} ({questions.filter(q => q.spec === s || (s === 'Peds/Neo' && q.spec === 'peds/neo')).length})
-                                            </button>
-                                        ))}
+                                        {['OB/MFM', 'Peds/Neo'].map(s => {
+                                            const count = questions.filter(q => 
+                                                (s === 'OB/MFM' && q.spec === 'OB/MFM') ||
+                                                (s === 'Peds/Neo' && (q.spec === 'Peds/Neo' || q.spec === 'peds/neo'))
+                                            ).length;
+                                            return (
+                                                <button
+                                                    key={s}
+                                                    onClick={() => setSpecialty(s)}
+                                                    className={`w-full py-2 px-4 mb-2 rounded-lg font-bold transition ${
+                                                        specialty === s ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
+                                                    }`}
+                                                >
+                                                    {s} ({count} questions)
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                     <button
-                                        onClick={() => evaluatorName && specialty && setStage('eval')}
-                                        disabled={!evaluatorName || !specialty}
-                                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg disabled:bg-gray-400"
+                                        onClick={() => {
+                                            if (evaluatorName && specialty) {
+                                                setStage('eval');
+                                            } else {
+                                                alert('Please enter name and select specialty');
+                                            }
+                                        }}
+                                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition disabled:bg-gray-400"
                                     >
-                                        Start
+                                        Start Evaluation
                                     </button>
                                 </div>
                             )}
@@ -119,15 +153,33 @@
             }
 
             if (stage === 'eval' && questions) {
-                const filtered = questions.filter(q => q.spec === specialty || (specialty === 'Peds/Neo' && q.spec === 'peds/neo'));
+                const filtered = questions.filter(q => 
+                    (specialty === 'OB/MFM' && q.spec === 'OB/MFM') ||
+                    (specialty === 'Peds/Neo' && (q.spec === 'Peds/Neo' || q.spec === 'peds/neo'))
+                );
+                
+                if (filtered.length === 0) {
+                    return (
+                        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6 flex items-center justify-center">
+                            <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+                                <h1 className="text-2xl font-bold text-gray-900 mb-4">No questions found</h1>
+                                <button onClick={() => setStage('setup')} className="bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg">
+                                    Back
+                                </button>
+                            </div>
+                        </div>
+                    );
+                }
+
                 const q = filtered[currentQ];
                 const m = q.models[currentM];
                 const key = `${currentQ}_${currentM}`;
                 const rating = ratings[key] || {};
 
                 const next = () => {
-                    if (currentM < 3) setCurrentM(currentM + 1);
-                    else if (currentQ < filtered.length - 1) {
+                    if (currentM < 3) {
+                        setCurrentM(currentM + 1);
+                    } else if (currentQ < filtered.length - 1) {
                         setCurrentQ(currentQ + 1);
                         setCurrentM(0);
                     }
@@ -140,21 +192,35 @@
                     }));
                 };
 
-                const dims = ['accuracy', 'clarity', 'safety', 'actionability', 'empathy'];
+                const dims = [
+                    { id: 'accuracy', label: 'Accuracy & Correctness' },
+                    { id: 'clarity', label: 'Clarity & Readability' },
+                    { id: 'safety', label: 'Safety & Appropriateness' },
+                    { id: 'actionability', label: 'Actionability & Usefulness' },
+                    { id: 'empathy', label: 'Tone & Empathy' }
+                ];
 
-                const export_csv = () => {
+                const exportCSV = () => {
                     const rows = filtered.flatMap((q, qi) => 
                         q.models.map((m, mi) => {
                             const r = ratings[`${qi}_${mi}`] || {};
                             return [
-                                evaluatorName, specialty, q.qNum, m.name,
-                                r.accuracy || '', r.clarity || '', r.safety || '',
-                                r.actionability || '', r.empathy || '', r.winner ? 'Yes' : 'No'
+                                evaluatorName,
+                                specialty,
+                                q.qNum,
+                                `"${q.question}"`,
+                                m.name,
+                                r.accuracy || '',
+                                r.clarity || '',
+                                r.safety || '',
+                                r.actionability || '',
+                                r.empathy || '',
+                                r.winner ? 'Yes' : 'No'
                             ];
                         })
                     );
                     const csv = [
-                        ['Evaluator', 'Specialty', 'Q#', 'Model', 'Accuracy', 'Clarity', 'Safety', 'Actionability', 'Empathy', 'Winner'],
+                        ['Evaluator', 'Specialty', 'Question#', 'Question', 'Model', 'Accuracy', 'Clarity', 'Safety', 'Actionability', 'Empathy', 'Winner'],
                         ...rows
                     ].map(r => r.join(',')).join('\n');
                     
@@ -162,70 +228,101 @@
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `${specialty}_${evaluatorName}.csv`;
+                    a.download = `${specialty}_${evaluatorName}_results.csv`;
                     a.click();
+                    URL.revokeObjectURL(url);
                 };
 
                 const isLast = currentQ === filtered.length - 1 && currentM === 3;
+                const total = filtered.length * 4;
+                const evaluated = Object.keys(ratings).length;
+                const progress = Math.round((evaluated / total) * 100);
 
                 return (
-                    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+                    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-6">
                         <div className="max-w-3xl mx-auto">
-                            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-                                <h2 className="text-2xl font-bold text-gray-900">Q{currentQ + 1}/{filtered.length} • R{currentM + 1}/4</h2>
-                                <p className="text-sm text-gray-600">{evaluatorName} • {specialty}</p>
-                            </div>
-
-                            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-                                <h3 className="font-bold text-lg mb-2">Question</h3>
-                                <p className="text-gray-800">{q.question}</p>
-                            </div>
-
-                            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-                                <div className="flex justify-between mb-2">
-                                    <h3 className="font-bold text-lg">Response</h3>
-                                    <span className="bg-blue-100 text-blue-900 px-2 py-1 rounded text-sm font-bold">{m.name}</span>
+                            <div className="bg-white rounded-lg shadow-lg p-4 md:p-6 mb-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <div>
+                                        <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
+                                            Q{currentQ + 1}/{filtered.length} • R{currentM + 1}/4
+                                        </h2>
+                                        <p className="text-sm text-gray-600 mt-1">{evaluatorName} • {specialty}</p>
+                                    </div>
+                                    {isLast && (
+                                        <button
+                                            onClick={exportCSV}
+                                            className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                                        >
+                                            📥 Export
+                                        </button>
+                                    )}
                                 </div>
-                                <div className="bg-gray-50 border border-gray-200 rounded p-4 max-h-80 overflow-y-auto text-sm text-gray-800 whitespace-pre-wrap">
+                                <div className="w-full bg-gray-300 rounded-full h-2 mb-2">
+                                    <div className="bg-indigo-600 h-2 rounded-full" style={{ width: `${progress}%` }}></div>
+                                </div>
+                                <p className="text-xs text-gray-600">{evaluated}/{total} rated ({progress}%)</p>
+                            </div>
+
+                            <div className="bg-white rounded-lg shadow-lg p-4 md:p-6 mb-6">
+                                <h3 className="font-bold text-lg mb-3">Question</h3>
+                                <p className="text-gray-800 text-base leading-relaxed">{q.question}</p>
+                            </div>
+
+                            <div className="bg-white rounded-lg shadow-lg p-4 md:p-6 mb-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="font-bold text-lg">Response</h3>
+                                    <span className="bg-blue-100 text-blue-900 px-3 py-1 rounded text-sm font-bold">
+                                        {m.name}
+                                    </span>
+                                </div>
+                                <div className="bg-gray-50 border border-gray-200 rounded p-4 max-h-80 overflow-y-auto text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
                                     {m.text}
                                 </div>
                             </div>
 
-                            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-                                <h3 className="font-bold text-lg mb-4">Rate</h3>
-                                {dims.map(d => (
-                                    <div key={d} className="mb-4">
-                                        <label className="text-sm font-bold text-gray-900 capitalize">{d}</label>
-                                        <div className="flex gap-1 mt-1">
-                                            {[1, 2, 3, 4, 5].map(s => (
-                                                <button
-                                                    key={s}
-                                                    onClick={() => save(d, s)}
-                                                    className={`flex-1 py-2 rounded font-bold text-sm ${
-                                                        rating[d] === s ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-900'
-                                                    }`}
-                                                >
-                                                    {s}
-                                                </button>
-                                            ))}
+                            <div className="bg-white rounded-lg shadow-lg p-4 md:p-6 mb-6">
+                                <h3 className="font-bold text-lg mb-6">Rate This Response</h3>
+                                <div className="space-y-5">
+                                    {dims.map(d => (
+                                        <div key={d.id}>
+                                            <label className="text-sm font-bold text-gray-900 block mb-2">{d.label}</label>
+                                            <div className="flex gap-2">
+                                                {[1, 2, 3, 4, 5].map(s => (
+                                                    <button
+                                                        key={s}
+                                                        onClick={() => save(d.id, s)}
+                                                        className={`flex-1 py-2 rounded font-bold text-sm transition ${
+                                                            rating[d.id] === s
+                                                                ? 'bg-indigo-600 text-white'
+                                                                : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
+                                                        }`}
+                                                    >
+                                                        {s}
+                                                    </button>
+                                                ))}
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
-                                <label className="mt-4 flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={rating.winner || false}
-                                        onChange={(e) => save('winner', e.target.checked)}
-                                    />
-                                    <span className="text-sm font-bold text-gray-900">Winner</span>
-                                </label>
+                                    ))}
+                                </div>
+                                <div className="mt-6 pt-6 border-t border-gray-200">
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={rating.winner || false}
+                                            onChange={(e) => save('winner', e.target.checked)}
+                                            className="w-5 h-5 rounded cursor-pointer"
+                                        />
+                                        <span className="font-bold text-gray-900">Mark as overall winner</span>
+                                    </label>
+                                </div>
                             </div>
 
                             <button
-                                onClick={isLast ? export_csv : next}
-                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg"
+                                onClick={isLast ? exportCSV : next}
+                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition text-lg"
                             >
-                                {isLast ? '✓ Export Results' : 'Next →'}
+                                {isLast ? '✓ Complete & Export Results' : 'Next Response →'}
                             </button>
                         </div>
                     </div>
