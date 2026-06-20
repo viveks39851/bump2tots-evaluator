@@ -192,7 +192,7 @@
                     setRatings(newRatings);
                 }
 
-                function exportCSV() {
+                function completeEval() {
                     var rows = [];
                     filtered.forEach(function(q, qi) {
                         q.models.forEach(function(m, mi) {
@@ -209,6 +209,7 @@
                     a.href = url;
                     a.download = spec + '_' + name + '_results.csv';
                     a.click();
+                    setStage('complete');
                 }
 
                 var isLast = qIdx === filtered.length - 1;
@@ -225,8 +226,7 @@
                                 e('div', null,
                                     e('h2', {className: 'text-2xl font-bold text-gray-900'}, 'Q' + (qIdx + 1) + '/' + total),
                                     e('p', {className: 'text-sm text-gray-600'}, name + ' • ' + spec)
-                                ),
-                                isLast ? e('button', {onClick: exportCSV, className: 'bg-green-600 text-white font-bold py-2 px-4 rounded'}, '📥 Export') : null
+                                )
                             ),
                             e('div', {className: 'w-full bg-gray-300 rounded-full h-2 mb-2'},
                                 e('div', {className: 'bg-indigo-600 h-2 rounded-full', style: {width: progress + '%'}})
@@ -240,10 +240,10 @@
                         e('div', {className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6'},
                             q.models.map(function(m, mi) {
                                 var rData = (qRating.responses && qRating.responses[mi]) || {};
-                                return e('div', {key: m.letter, className: 'bg-white rounded-lg shadow-lg p-4 border-2 border-gray-200'},
+                                return e('div', {key: m.letter, className: 'bg-white rounded-lg shadow-lg p-4 border-2 border-gray-200 flex flex-col'},
                                     e('h4', {className: 'font-bold text-lg mb-3 text-center bg-gray-100 py-2 rounded'}, 'Response ' + m.letter),
-                                    e('div', {className: 'bg-gray-50 rounded p-3 text-sm text-gray-800 whitespace-pre-wrap mb-4'}, m.text),
-                                    e('div', {className: 'space-y-2'},
+                                    e('div', {className: 'bg-gray-50 rounded p-3 text-sm text-gray-800 whitespace-pre-wrap mb-4 flex-grow min-h-32'}, m.text),
+                                    e('div', {className: 'space-y-2 mt-auto'},
                                         dims.map(function(d) {
                                             return e('div', {key: d},
                                                 e('label', {className: 'text-xs font-bold text-gray-700 block mb-1'}, d.charAt(0).toUpperCase() + d.slice(1)),
@@ -275,7 +275,42 @@
                                 })
                             )
                         ),
-                        e('button', {onClick: isLast ? exportCSV : next, className: 'w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mb-6'}, isLast ? '✓ Complete & Export' : 'Next Question →')
+                        e('button', {onClick: isLast ? completeEval : next, className: 'w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mb-6'}, isLast ? '✓ Complete & Export' : 'Next Question →')
+                    )
+                );
+            }
+
+            if (stage === 'complete') {
+                var filename = spec + '_' + name + '_results.csv';
+                return e('div', {className: 'min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6'},
+                    e('div', {className: 'max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-8'},
+                        e('div', {className: 'text-center mb-8'},
+                            e('h1', {className: 'text-4xl font-bold text-green-600 mb-2'}, '✓ Evaluation Complete!'),
+                            e('p', {className: 'text-lg text-gray-700'}, 'Thank you for your thorough evaluation.')
+                        ),
+                        e('div', {className: 'bg-green-50 border-2 border-green-200 rounded-lg p-6 mb-6'},
+                            e('h2', {className: 'font-bold text-lg text-gray-900 mb-2'}, '📥 File Downloaded'),
+                            e('p', {className: 'text-gray-800 font-mono bg-gray-100 p-3 rounded'}, filename),
+                            e('p', {className: 'text-sm text-gray-600 mt-2'}, 'This file is saved in your Downloads folder.')
+                        ),
+                        e('div', {className: 'bg-blue-50 border-2 border-blue-200 rounded-lg p-6 mb-6'},
+                            e('h2', {className: 'font-bold text-lg text-gray-900 mb-3'}, '📧 Next Steps'),
+                            e('ol', {className: 'list-decimal list-inside space-y-2 text-gray-800'},
+                                e('li', null, e('span', {className: 'font-bold'}, 'Email this file to: '), e('span', {className: 'font-mono text-blue-600'}, 'vshukla@uabmc.edu')),
+                                e('li', null, e('span', {className: 'font-bold'}, 'Subject: '), e('span', null, spec + ' Evaluation Results - ' + name)),
+                                e('li', null, 'Include your name and specialty in the email')
+                            )
+                        ),
+                        e('div', {className: 'bg-gray-50 border-2 border-gray-200 rounded-lg p-6 mb-6'},
+                            e('h2', {className: 'font-bold text-lg text-gray-900 mb-3'}, '📋 What Happens Next'),
+                            e('ul', {className: 'space-y-2 text-gray-800'},
+                                e('li', null, '✓ All evaluator responses will be collected'),
+                                e('li', null, '✓ Ratings will be aggregated across evaluators'),
+                                e('li', null, '✓ Cohen\'s kappa will measure inter-rater agreement'),
+                                e('li', null, '✓ Statistical analysis will determine top-performing model')
+                            )
+                        ),
+                        e('button', {onClick: function() { setStage('setup'); setQIdx(0); setRatings({}); }, className: 'w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg'}, 'Start New Evaluation')
                     )
                 );
             }
