@@ -63,6 +63,84 @@
             return rows;
         }
 
+        function VoiceRecorder(props) {
+            const [isRecording, setIsRecording] = useState(false);
+            const [transcript, setTranscript] = useState(props.value || '');
+            const [recognition, setRecognition] = useState(null);
+
+            React.useEffect(function() {
+                var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (SpeechRecognition) {
+                    var recog = new SpeechRecognition();
+                    recog.continuous = true;
+                    recog.interimResults = true;
+                    recog.lang = 'en-US';
+                    
+                    recog.onresult = function(event) {
+                        var interim = '';
+                        for (var i = event.resultIndex; i < event.results.length; i++) {
+                            var t = event.results[i][0].transcript;
+                            if (event.results[i].isFinal) {
+                                setTranscript(function(prev) { return prev + ' ' + t; });
+                            } else {
+                                interim += t;
+                            }
+                        }
+                    };
+                    
+                    recog.onerror = function() {
+                        setIsRecording(false);
+                    };
+                    
+                    setRecognition(recog);
+                }
+            }, []);
+
+            function startRecording() {
+                if (recognition) {
+                    setTranscript('');
+                    recognition.start();
+                    setIsRecording(true);
+                }
+            }
+
+            function stopRecording() {
+                if (recognition) {
+                    recognition.stop();
+                    setIsRecording(false);
+                    props.onChange(transcript.trim());
+                }
+            }
+
+            function clearTranscript() {
+                setTranscript('');
+            }
+
+            return e('div', {className: 'space-y-2'},
+                e('div', {className: 'flex gap-2'},
+                    e('button', {
+                        onClick: isRecording ? stopRecording : startRecording,
+                        className: 'flex-1 py-2 px-3 rounded-lg font-bold text-sm transition ' + (isRecording ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white')
+                    }, isRecording ? '⏹️ Stop Recording' : '🎤 Record'),
+                    e('button', {
+                        onClick: clearTranscript,
+                        className: 'py-2 px-3 rounded-lg font-bold text-sm bg-gray-300 hover:bg-gray-400'
+                    }, 'Clear')
+                ),
+                transcript ? e('div', {className: 'bg-blue-50 border border-blue-200 rounded p-2'},
+                    e('p', {className: 'text-xs text-gray-600 mb-1'}, 'Transcript:'),
+                    e('p', {className: 'text-sm text-gray-800'}, transcript)
+                ) : null,
+                e('textarea', {
+                    value: transcript,
+                    onChange: function(e) { setTranscript(e.target.value); props.onChange(e.target.value); },
+                    placeholder: 'Or type your clinical notes here...',
+                    className: 'w-full px-3 py-2 border border-gray-300 rounded text-sm',
+                    rows: 2
+                })
+            );
+        }
+
         function App() {
             const [stage, setStage] = useState('setup');
             const [name, setName] = useState('');
@@ -183,6 +261,16 @@
                     setRatings(newRatings);
                 }
 
+                function saveNote(responseIdx, note) {
+                    var newRatings = Object.assign({}, ratings);
+                    var qData = Object.assign({}, ratings[key], {});
+                    if (!qData.responses) qData.responses = [{}, {}, {}, {}];
+                    if (!qData.responses[responseIdx]) qData.responses[responseIdx] = {};
+                    qData.responses[responseIdx].clinicalNote = note;
+                    newRatings[key] = qData;
+                    setRatings(newRatings);
+                }
+
                 function saveBest(bestLetter) {
                     var newRatings = Object.assign({}, ratings);
                     var qData = Object.assign({}, ratings[key], {});
@@ -198,10 +286,11 @@
                         q.models.forEach(function(m, mi) {
                             var qData = ratings[qi.toString()] || {};
                             var rData = (qData.responses && qData.responses[mi]) || {};
-                            rows.push([name, spec, q.qNum, '"' + q.question.replace(/"/g, '""') + '"', m.name, rData.accuracy || '', rData.clarity || '', rData.safety || '', rData.actionability || '', rData.empathy || '', qData.best === m.letter ? 'Yes' : 'No']);
+                            var note = (rData.clinicalNote || '').replace(/"/g, '""');
+                            rows.push([name, spec, q.qNum, '"' + q.question.replace(/"/g, '""') + '"', m.name, rData.accuracy || '', rData.clarity || '', rData.safety || '', rData.actionability || '', rData.empathy || '', '"' + note + '"', qData.best === m.letter ? 'Yes' : 'No']);
                         });
                     });
-                    var header = ['Evaluator', 'Specialty', 'Question#', 'Question', 'Model', 'Accuracy', 'Clarity', 'Safety', 'Actionability', 'Empathy', 'Best'];
+                    var header = ['Evaluator', 'Specialty', 'Question#', 'Question', 'Model', 'Accuracy', 'Clarity', 'Safety', 'Actionability', 'Empathy', 'Clinical Notes', 'Best'];
                     var csv = [header].concat(rows).map(function(r) { return r.join(','); }).join('\n');
                     var blob = new Blob([csv], {type: 'text/csv'});
                     var url = URL.createObjectURL(blob);
@@ -258,7 +347,14 @@
                                                     })
                                                 )
                                             );
-                                        })
+                                        }),
+                                        e('div', {className: 'pt-2 border-t mt-2'},
+                                            e('label', {className: 'text-xs font-bold text-gray-700 block mb-1'}, '💬 Clinical Notes (Optional)'),
+                                            React.createElement(VoiceRecorder, {
+                                                value: rData.clinicalNote || '',
+                                                onChange: function(val) { saveNote(mi, val); }
+                                            })
+                                        )
                                     )
                                 );
                             })
@@ -307,6 +403,7 @@
                                 e('li', null, '✓ All evaluator responses will be collected'),
                                 e('li', null, '✓ Ratings will be aggregated across evaluators'),
                                 e('li', null, '✓ Cohen\'s kappa will measure inter-rater agreement'),
+                                e('li', null, '✓ Your clinical insights will inform model improvements'),
                                 e('li', null, '✓ Statistical analysis will determine top-performing model')
                             )
                         ),
