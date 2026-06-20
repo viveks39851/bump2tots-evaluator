@@ -156,10 +156,10 @@
                     filtered.forEach(function(q, qi) {
                         q.models.forEach(function(m, mi) {
                             var r = ratings[qi + '_' + mi] || {};
-                            rows.push([name, spec, q.qNum, '"' + q.question + '"', m.name, r.accuracy || '', r.clarity || '', r.safety || '', r.actionability || '', r.empathy || '', r.winner ? 'Yes' : 'No']);
+                            rows.push([name, spec, q.qNum, '"' + q.question + '"', m.name, r.accuracy || '', r.clarity || '', r.safety || '', r.actionability || '', r.empathy || '']);
                         });
                     });
-                    var header = ['Evaluator', 'Specialty', 'Question#', 'Question', 'Model', 'Accuracy', 'Clarity', 'Safety', 'Actionability', 'Empathy', 'Winner'];
+                    var header = ['Evaluator', 'Specialty', 'Question#', 'Question', 'Model', 'Accuracy', 'Clarity', 'Safety', 'Actionability', 'Empathy'];
                     var csv = [header].concat(rows).map(function(r) { return r.join(','); }).join('\n');
                     var blob = new Blob([csv], {type: 'text/csv'});
                     var url = URL.createObjectURL(blob);
@@ -210,13 +210,7 @@
                                         })
                                     )
                                 );
-                            }),
-                            e('div', {className: 'mt-4 pt-4 border-t'},
-                                e('label', {className: 'flex items-center gap-2'},
-                                    e('input', {type: 'checkbox', checked: rating.winner || false, onChange: function(e) { save('winner', e.target.checked); }}),
-                                    e('span', {className: 'font-bold'}, 'Mark as overall winner')
-                                )
-                            )
+                            })
                         ),
                         e('button', {onClick: isLast ? exportCSV : next, className: 'w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg'}, isLast ? '✓ Export Results' : 'Next →')
                     )
