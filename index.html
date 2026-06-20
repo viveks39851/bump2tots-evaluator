@@ -219,7 +219,7 @@
                 var dims = ['accuracy', 'clarity', 'safety', 'actionability', 'empathy'];
 
                 return e('div', {className: 'min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6'},
-                    e('div', {className: 'max-w-full mx-auto px-4'},
+                    e('div', {className: 'max-w-full mx-auto px-2 sm:px-4'},
                         e('div', {className: 'bg-white rounded-lg shadow-lg p-6 mb-6'},
                             e('div', {className: 'flex justify-between mb-4'},
                                 e('div', null,
@@ -240,9 +240,9 @@
                         e('div', {className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6'},
                             q.models.map(function(m, mi) {
                                 var rData = (qRating.responses && qRating.responses[mi]) || {};
-                                return e('div', {key: m.letter, className: 'bg-white rounded-lg shadow-lg p-4 border-2 border-gray-200 flex flex-col'},
+                                return e('div', {key: m.letter, className: 'bg-white rounded-lg shadow-lg p-4 border-2 border-gray-200'},
                                     e('h4', {className: 'font-bold text-lg mb-3 text-center bg-gray-100 py-2 rounded'}, 'Response ' + m.letter),
-                                    e('div', {className: 'bg-gray-50 rounded p-3 max-h-48 overflow-y-auto text-sm text-gray-800 whitespace-pre-wrap mb-4 flex-grow'}, m.text),
+                                    e('div', {className: 'bg-gray-50 rounded p-3 text-sm text-gray-800 whitespace-pre-wrap mb-4'}, m.text),
                                     e('div', {className: 'space-y-2'},
                                         dims.map(function(d) {
                                             return e('div', {key: d},
