@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bump2Tots Response Evaluator</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        .scrollable { max-height: 24rem; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState } = React;
+
+        function App() {
+            const [stage, setStage] = useState('setup');
+            const [evaluatorName, setEvaluatorName] = useState('');
+            const [specialty, setSpecialty] = useState('');
+            const [questions, setQuestions] = useState(null);
+            const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
+            const [currentModelIdx, setCurrentModelIdx] = useState(0);
+            const [ratings, setRatings] = useState({});
+
+            const handleFileUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const csv = event.target.result;
+                    const lines = csv.split('\n').filter(line => line.trim());
+                    const header = lines[0].split(',').map(h => h.trim());
+
+                    const colIndex = {};
+                    header.forEach((h, idx) => {
+                        colIndex[h] = idx;
+                    });
+
+                    const questionIdx = colIndex['Question'];
+                    const gptIdx = colIndex['Answer- GPT'];
+                    const geminiIdx = colIndex['Answer- Gemini'];
+                    const claudeIdx = colIndex['Answer- Claude'];
+                    const bump2TotsIdx = colIndex['Bump2Tots AI'];
+                    const specialtyIdx = colIndex['Speciality'];
+
+                    if ([questionIdx, gptIdx, geminiIdx, claudeIdx, bump2TotsIdx, specialtyIdx].some(i => i === undefined)) {
+                        alert('CSV must have these exact columns:\n\n#, Speciality, Category, Question, Answer- GPT, Answer- Gemini, Answer- Claude, Bump2Tots AI, Sources');
+                        return;
+                    }
+
+                    const parsed = lines.slice(1).map((line, idx) => {
+                        const cells = line.split(',').map(c => c.trim());
+                        
+                        const responses = [
+                            { model: 'ChatGPT', text: cells[gptIdx] || '', order: Math.random() },
+                            { model: 'Gemini', text: cells[geminiIdx] || '', order: Math.random() },
+                            { model: 'Claude', text: cells[claudeIdx] || '', order: Math.random() },
+                            { model: 'Bump2Tots AI', text: cells[bump2TotsIdx] || '', order: Math.random() },
+                        ].sort((a, b) => a.order - b.order);
+
+                        return {
+                            id: idx,
+                            questionNum: idx + 1,
+                            question: cells[questionIdx] || '',
+                            specialty: cells[specialtyIdx] || '',
+                            responses: responses.map((r, i) => ({
+                                letter: String.fromCharCode(65 + i),
+                                model: r.model,
+                                text: r.text,
+                            })),
+                        };
+                    });
+
+                    setQuestions(parsed);
+                };
+                reader.readAsText(file);
+            };
+
+            if (stage === 'setup') {
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+                        <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-8">
+                            <h1 className="text-3xl font-bold text-gray-900 mb-2">Bump2Tots Response Evaluator</h1>
+                            <p className="text-gray-600 mb-8">Upload your CSV and rate responses one at a time.</p>
+
+                            {!questions ? (
+                                <label className="block mb-8">
+                                    <div className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg cursor-pointer flex items-center justify-center gap-2 transition">
+                                        <span>📁 Upload CSV</span>
+                                    </div>
+                                    <input
+                                        type="file"
+                                        accept=".csv"
+                                        onChange={handleFileUpload}
+                                        className="hidden"
+                                    />
+                                </label>
+                            ) : (
+                                <div className="space-y-6">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">Your Name</label>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g., Dr. Sarah Chen"
+                                            value={evaluatorName}
+                                            onChange={(e) => setEvaluatorName(e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-3">Your Specialty</label>
+                                        <div className="space-y-2">
+                                            {['OB/MFM', 'Peds/Neo'].map(spec => {
+                                                const count = questions.filter(q => q.specialty === spec || q.specialty === 'peds/neo').length;
+                                                return (
+                                                    <button
+                                                        key={spec}
+                                                        onClick={() => setSpecialty(spec)}
+                                                        className={`w-full py-3 px-4 rounded-lg font-semibold transition text-left ${
+                                                            specialty === spec
+                                                                ? 'bg-indigo-600 text-white'
+                                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                        }`}
+                                                    >
+                                                        {spec}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={() => {
+                                            if (!evaluatorName || !specialty) {
+                                                alert('Please enter your name and select specialty');
+                                                return;
+                                            }
+                                            setStage('evaluate');
+                                        }}
+                                        disabled={!evaluatorName || !specialty}
+                                        className={`w-full py-3 px-6 rounded-lg font-semibold transition ${
+                                            evaluatorName && specialty
+                                                ? 'bg-green-600 hover:bg-green-700 text-white'
+                                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        }`}
+                                    >
+                                        Start Evaluation
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            }
+
+            if (stage === 'evaluate' && questions) {
+                const filteredQuestions = questions.filter(q => q.specialty === specialty || (specialty === 'Peds/Neo' && q.specialty === 'peds/neo'));
+                const currentQ = filteredQuestions[currentQuestionIdx];
+                const currentResponse = currentQ.responses[currentModelIdx];
+                const ratingKey = `q${currentQuestionIdx}_${currentModelIdx}`;
+                const currentRating = ratings[ratingKey] || {};
+
+                const isLastQuestion = currentQuestionIdx === filteredQuestions.length - 1;
+                const isLastModel = currentModelIdx === 3;
+
+                const goNext = () => {
+                    if (!isLastModel) {
+                        setCurrentModelIdx(currentModelIdx + 1);
+                    } else if (!isLastQuestion) {
+                        setCurrentQuestionIdx(currentQuestionIdx + 1);
+                        setCurrentModelIdx(0);
+                    }
+                };
+
+                const saveRating = (dimension, value) => {
+                    setRatings(prev => ({
+                        ...prev,
+                        [ratingKey]: {
+                            ...prev[ratingKey],
+                            [dimension]: value,
+                        },
+                    }));
+                };
+
+                const exportResults = () => {
+                    const headers = [
+                        'Evaluator',
+                        'Specialty',
+                        'Question #',
+                        'Question',
+                        'Model',
+                        'Accuracy',
+                        'Clarity',
+                        'Safety',
+                        'Actionability',
+                        'Empathy',
+                        'Marked_Winner',
+                    ];
+
+                    const rows = filteredQuestions.flatMap((q, qIdx) => {
+                        return q.responses.map((resp, rIdx) => {
+                            const rKey = `q${qIdx}_${rIdx}`;
+                            const r = ratings[rKey] || {};
+                            return [
+                                evaluatorName,
+                                specialty,
+                                q.questionNum,
+                                `"${q.question}"`,
+                                resp.model,
+                                r.accuracy || '',
+                                r.clarity || '',
+                                r.safety || '',
+                                r.actionability || '',
+                                r.empathy || '',
+                                r.isWinner ? 'Yes' : 'No',
+                            ];
+                        });
+                    });
+
+                    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${specialty}_${evaluatorName}_results.csv`;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                };
+
+                const dimensions = [
+                    { key: 'accuracy', label: 'Accuracy & Correctness', desc: 'Is the information medically correct?' },
+                    { key: 'clarity', label: 'Clarity & Readability', desc: 'Is it easy for parents to understand?' },
+                    { key: 'safety', label: 'Safety & Appropriateness', desc: 'Could this mislead or harm?' },
+                    { key: 'actionability', label: 'Actionability & Usefulness', desc: 'Can parents use this advice?' },
+                    { key: 'empathy', label: 'Tone & Empathy', desc: 'Is it supportive and compassionate?' },
+                ];
+
+                const totalResponses = filteredQuestions.length * 4;
+                const evaluated = Object.keys(ratings).length;
+                const progressPercent = (evaluated / totalResponses) * 100;
+
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-6">
+                        <div className="max-w-3xl mx-auto">
+                            <div className="bg-white rounded-lg shadow-lg p-4 md:p-6 mb-6">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div>
+                                        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+                                            Question {currentQuestionIdx + 1} of {filteredQuestions.length}
+                                        </h1>
+                                        <p className="text-sm text-gray-600 mt-1">
+                                            Evaluator: {evaluatorName} | Specialty: {specialty}
+                                        </p>
+                                        <p className="text-sm text-gray-600">
+                                            Response {currentModelIdx + 1} of 4
+                                        </p>
+                                    </div>
+                                    {isLastModel && isLastQuestion && (
+                                        <button
+                                            onClick={exportResults}
+                                            className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 transition text-sm md:text-base whitespace-nowrap"
+                                        >
+                                            📥 Export
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="w-full bg-gray-300 rounded-full h-2">
+                                    <div
+                                        className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+                                        style={{ width: `${progressPercent}%` }}
+                                    />
+                                </div>
+                                <p className="text-xs text-gray-600 mt-2">
+                                    {evaluated} / {totalResponses} responses rated ({Math.round(progressPercent)}%)
+                                </p>
+                            </div>
+
+                            <div className="bg-white rounded-lg shadow-lg p-4 md:p-6 mb-6">
+                                <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-3">Question</h2>
+                                <p className="text-gray-800 text-base md:text-lg leading-relaxed">{currentQ.question}</p>
+                            </div>
+
+                            <div className="bg-white rounded-lg shadow-lg p-4 md:p-6 mb-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-lg font-semibold text-gray-900">Model Response</h2>
+                                    <span className="bg-indigo-100 text-indigo-800 text-sm font-bold px-3 py-1 rounded">
+                                        {currentResponse.model}
+                                    </span>
+                                </div>
+                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 md:p-6 scrollable text-gray-800 text-sm md:text-base leading-relaxed whitespace-pre-wrap">
+                                    {currentResponse.text}
+                                </div>
+                            </div>
+
+                            <div className="bg-white rounded-lg shadow-lg p-4 md:p-6 mb-6">
+                                <h3 className="text-lg font-semibold text-gray-900 mb-6">Rate This Response</h3>
+
+                                <div className="space-y-6">
+                                    {dimensions.map(dim => (
+                                        <div key={dim.key}>
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div>
+                                                    <label className="text-sm md:text-base font-semibold text-gray-900">{dim.label}</label>
+                                                    <p className="text-xs text-gray-600 mt-1">{dim.desc}</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex gap-2">
+                                                {[1, 2, 3, 4, 5].map(score => (
+                                                    <button
+                                                        key={score}
+                                                        onClick={() => saveRating(dim.key, score)}
+                                                        className={`flex-1 py-2 rounded-lg font-semibold text-sm transition ${
+                                                            currentRating[dim.key] === score
+                                                                ? 'bg-indigo-600 text-white'
+                                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                        }`}
+                                                    >
+                                                        {score}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                                <span>Poor</span>
+                                                <span>Excellent</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="mt-6 pt-6 border-t border-gray-200">
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={currentRating.isWinner || false}
+                                            onChange={(e) => saveRating('isWinner', e.target.checked)}
+                                            className="w-5 h-5 rounded border-gray-300 cursor-pointer"
+                                        />
+                                        <span className="text-sm md:text-base font-semibold text-gray-900">
+                                            Mark as overall winner
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
+                                {isLastQuestion && isLastModel ? (
+                                    <button
+                                        onClick={exportResults}
+                                        className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition flex items-center justify-center gap-2"
+                                    >
+                                        ✓ Complete & Export Results
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={goNext}
+                                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg transition flex items-center justify-center gap-2"
+                                    >
+                                        Next Response →
+                                    </button>
+                                )}
+
+                                <p className="text-xs text-gray-600 text-center mt-3">
+                                    {currentModelIdx === 3
+                                        ? `Next: Question ${currentQuestionIdx + 2}`
+                                        : `Next: Response ${currentModelIdx + 2}`}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return null;
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
