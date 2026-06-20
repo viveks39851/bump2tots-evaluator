@@ -134,9 +134,9 @@
                 e('textarea', {
                     value: transcript,
                     onChange: function(e) { setTranscript(e.target.value); props.onChange(e.target.value); },
-                    placeholder: 'Or type your clinical notes here...',
+                    placeholder: 'Or type your clinical insights here...',
                     className: 'w-full px-3 py-2 border border-gray-300 rounded text-sm',
-                    rows: 2
+                    rows: 3
                 })
             );
         }
@@ -261,21 +261,19 @@
                     setRatings(newRatings);
                 }
 
-                function saveNote(responseIdx, note) {
-                    var newRatings = Object.assign({}, ratings);
-                    var qData = Object.assign({}, ratings[key], {});
-                    if (!qData.responses) qData.responses = [{}, {}, {}, {}];
-                    if (!qData.responses[responseIdx]) qData.responses[responseIdx] = {};
-                    qData.responses[responseIdx].clinicalNote = note;
-                    newRatings[key] = qData;
-                    setRatings(newRatings);
-                }
-
                 function saveBest(bestLetter) {
                     var newRatings = Object.assign({}, ratings);
                     var qData = Object.assign({}, ratings[key], {});
                     if (!qData.responses) qData.responses = [{}, {}, {}, {}];
                     qData.best = bestLetter;
+                    newRatings[key] = qData;
+                    setRatings(newRatings);
+                }
+
+                function saveClinicalNote(note) {
+                    var newRatings = Object.assign({}, ratings);
+                    var qData = Object.assign({}, ratings[key], {});
+                    qData.clinicalNote = note;
                     newRatings[key] = qData;
                     setRatings(newRatings);
                 }
@@ -286,7 +284,7 @@
                         q.models.forEach(function(m, mi) {
                             var qData = ratings[qi.toString()] || {};
                             var rData = (qData.responses && qData.responses[mi]) || {};
-                            var note = (rData.clinicalNote || '').replace(/"/g, '""');
+                            var note = (qData.clinicalNote || '').replace(/"/g, '""');
                             rows.push([name, spec, q.qNum, '"' + q.question.replace(/"/g, '""') + '"', m.name, rData.accuracy || '', rData.clarity || '', rData.safety || '', rData.actionability || '', rData.empathy || '', '"' + note + '"', qData.best === m.letter ? 'Yes' : 'No']);
                         });
                     });
@@ -347,21 +345,14 @@
                                                     })
                                                 )
                                             );
-                                        }),
-                                        e('div', {className: 'pt-2 border-t mt-2'},
-                                            e('label', {className: 'text-xs font-bold text-gray-700 block mb-1'}, '💬 Clinical Notes (Optional)'),
-                                            React.createElement(VoiceRecorder, {
-                                                value: rData.clinicalNote || '',
-                                                onChange: function(val) { saveNote(mi, val); }
-                                            })
-                                        )
+                                        })
                                     )
                                 );
                             })
                         ),
                         e('div', {className: 'bg-white rounded-lg shadow-lg p-6 mb-6'},
                             e('h3', {className: 'font-bold text-lg mb-4'}, 'Which Response is Best?'),
-                            e('div', {className: 'grid grid-cols-4 gap-2'},
+                            e('div', {className: 'grid grid-cols-4 gap-2 mb-6'},
                                 ['A', 'B', 'C', 'D'].map(function(letter) {
                                     return e('button', {
                                         key: letter,
@@ -369,7 +360,15 @@
                                         className: 'py-3 rounded-lg font-bold text-lg transition ' + (qRating.best === letter ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-900 hover:bg-gray-300')
                                     }, letter);
                                 })
-                            )
+                            ),
+                            qRating.best ? e('div', {className: 'border-t pt-6'},
+                                e('h3', {className: 'font-bold text-lg mb-4'}, '📝 Clinical Insights for Response ' + qRating.best + ' (Optional)'),
+                                e('p', {className: 'text-sm text-gray-600 mb-3'}, 'Help us improve this response by sharing what you would include or avoid in your clinical practice:'),
+                                React.createElement(VoiceRecorder, {
+                                    value: qRating.clinicalNote || '',
+                                    onChange: function(val) { saveClinicalNote(val); }
+                                })
+                            ) : null
                         ),
                         e('button', {onClick: isLast ? completeEval : next, className: 'w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mb-6'}, isLast ? '✓ Complete & Export' : 'Next Question →')
                     )
