@@ -16,6 +16,53 @@
         const e = React.createElement;
         const useState = React.useState;
 
+        function parseCSVProperly(csvText) {
+            var rows = [];
+            var currentRow = [];
+            var currentCell = '';
+            var insideQuotes = false;
+            
+            for (var i = 0; i < csvText.length; i++) {
+                var char = csvText[i];
+                var nextChar = csvText[i + 1];
+                
+                if (char === '"') {
+                    if (insideQuotes && nextChar === '"') {
+                        currentCell += '"';
+                        i++;
+                    } else {
+                        insideQuotes = !insideQuotes;
+                    }
+                } else if (char === ',' && !insideQuotes) {
+                    currentRow.push(currentCell.trim());
+                    currentCell = '';
+                } else if ((char === '\n' || char === '\r') && !insideQuotes) {
+                    if (currentCell || currentRow.length > 0) {
+                        currentRow.push(currentCell.trim());
+                        if (currentRow.some(function(c) { return c.length > 0; })) {
+                            rows.push(currentRow);
+                        }
+                        currentRow = [];
+                        currentCell = '';
+                    }
+                    if (char === '\r' && nextChar === '\n') {
+                        i++;
+                    }
+                } else {
+                    currentCell += char;
+                }
+            }
+            
+            if (currentCell || currentRow.length > 0) {
+                currentRow.push(currentCell.trim());
+                if (currentRow.some(function(c) { return c.length > 0; })) {
+                    rows.push(currentRow);
+                }
+            }
+            
+            return rows;
+        }
+
         function App() {
             const [stage, setStage] = useState('setup');
             const [name, setName] = useState('');
@@ -25,35 +72,22 @@
             const [mIdx, setMIdx] = useState(0);
             const [ratings, setRatings] = useState({});
 
-            function parseCSV(line) {
-                var cells = [];
-                var current = '';
-                var inQuotes = false;
-                for (var i = 0; i < line.length; i++) {
-                    var c = line[i];
-                    if (c === '"') {
-                        inQuotes = !inQuotes;
-                    } else if (c === ',' && !inQuotes) {
-                        cells.push(current.trim().replace(/^"(.*)"$/, '$1'));
-                        current = '';
-                    } else {
-                        current += c;
-                    }
-                }
-                cells.push(current.trim().replace(/^"(.*)"$/, '$1'));
-                return cells;
-            }
-
             function handleUpload(ev) {
                 var file = ev.target.files[0];
                 if (!file) return;
                 var reader = new FileReader();
                 reader.onload = function(e2) {
                     var csv = e2.target.result;
-                    var lines = csv.split('\n').filter(function(l) { return l.trim(); });
-                    var header = lines[0].split(',').map(function(h) { return h.trim(); });
+                    var rows = parseCSVProperly(csv);
+                    
+                    if (rows.length < 2) {
+                        alert('Invalid CSV');
+                        return;
+                    }
 
+                    var header = rows[0];
                     var qIdx = -1, sIdx = -1, gIdx = -1, geIdx = -1, cIdx = -1, bIdx = -1;
+                    
                     for (var i = 0; i < header.length; i++) {
                         var h = header[i].toLowerCase();
                         if (h.includes('question')) qIdx = i;
@@ -65,12 +99,11 @@
                     }
 
                     if (qIdx < 0 || sIdx < 0 || gIdx < 0 || geIdx < 0 || cIdx < 0 || bIdx < 0) {
-                        alert('Missing columns');
+                        alert('Missing columns: question, speciality, Answer-GPT, Answer-Gemini, Answer-Claude, Bump2Tots AI');
                         return;
                     }
 
-                    var parsed = lines.slice(1).map(function(line, idx) {
-                        var cells = parseCSV(line);
+                    var parsed = rows.slice(1).map(function(cells, idx) {
                         var models = [
                             { name: 'ChatGPT', text: cells[gIdx] || '' },
                             { name: 'Gemini', text: cells[geIdx] || '' },
@@ -156,7 +189,7 @@
                     filtered.forEach(function(q, qi) {
                         q.models.forEach(function(m, mi) {
                             var r = ratings[qi + '_' + mi] || {};
-                            rows.push([name, spec, q.qNum, '"' + q.question + '"', m.name, r.accuracy || '', r.clarity || '', r.safety || '', r.actionability || '', r.empathy || '']);
+                            rows.push([name, spec, q.qNum, '"' + q.question.replace(/"/g, '""') + '"', m.name, r.accuracy || '', r.clarity || '', r.safety || '', r.actionability || '', r.empathy || '']);
                         });
                     });
                     var header = ['Evaluator', 'Specialty', 'Question#', 'Question', 'Model', 'Accuracy', 'Clarity', 'Safety', 'Actionability', 'Empathy'];
@@ -193,11 +226,11 @@
                         ),
                         e('div', {className: 'bg-white rounded-lg shadow-lg p-6 mb-6'},
                             e('h3', {className: 'font-bold text-lg mb-3'}, 'Question'),
-                            e('p', {className: 'text-gray-800'}, q.question)
+                            e('p', {className: 'text-gray-800 whitespace-pre-wrap'}, q.question)
                         ),
                         e('div', {className: 'bg-white rounded-lg shadow-lg p-6 mb-6'},
                             e('h3', {className: 'font-bold text-lg mb-4'}, 'Response ' + m.letter),
-                            e('div', {className: 'bg-gray-50 border border-gray-200 rounded p-4 max-h-80 overflow-y-auto text-sm text-gray-800'}, m.text)
+                            e('div', {className: 'bg-gray-50 border border-gray-200 rounded p-4 max-h-80 overflow-y-auto text-sm text-gray-800 whitespace-pre-wrap'}, m.text)
                         ),
                         e('div', {className: 'bg-white rounded-lg shadow-lg p-6 mb-6'},
                             e('h3', {className: 'font-bold text-lg mb-6'}, 'Rate This Response'),
