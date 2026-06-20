@@ -219,11 +219,11 @@
                 var dims = ['accuracy', 'clarity', 'safety', 'actionability', 'empathy'];
 
                 return e('div', {className: 'min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6'},
-                    e('div', {className: 'max-w-7xl mx-auto'},
+                    e('div', {className: 'max-w-full mx-auto px-4'},
                         e('div', {className: 'bg-white rounded-lg shadow-lg p-6 mb-6'},
                             e('div', {className: 'flex justify-between mb-4'},
                                 e('div', null,
-                                    e('h2', {className: 'text-2xl font-bold text-gray-900'}, 'Q' + (qIdx + 1) + '/' + filtered.length),
+                                    e('h2', {className: 'text-2xl font-bold text-gray-900'}, 'Q' + (qIdx + 1) + '/' + total),
                                     e('p', {className: 'text-sm text-gray-600'}, name + ' • ' + spec)
                                 ),
                                 isLast ? e('button', {onClick: exportCSV, className: 'bg-green-600 text-white font-bold py-2 px-4 rounded'}, '📥 Export') : null
@@ -237,64 +237,45 @@
                             e('h3', {className: 'font-bold text-lg mb-3'}, 'Question'),
                             e('p', {className: 'text-gray-800 whitespace-pre-wrap text-base'}, q.question)
                         ),
-                        e('div', {className: 'grid grid-cols-1 md:grid-cols-2 gap-4 mb-6'},
-                            q.models.map(function(m) {
-                                return e('div', {key: m.letter, className: 'bg-white rounded-lg shadow p-4 border-2 border-gray-200'},
+                        e('div', {className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6'},
+                            q.models.map(function(m, mi) {
+                                var rData = (qRating.responses && qRating.responses[mi]) || {};
+                                return e('div', {key: m.letter, className: 'bg-white rounded-lg shadow-lg p-4 border-2 border-gray-200 flex flex-col'},
                                     e('h4', {className: 'font-bold text-lg mb-3 text-center bg-gray-100 py-2 rounded'}, 'Response ' + m.letter),
-                                    e('div', {className: 'bg-gray-50 rounded p-3 max-h-64 overflow-y-auto text-sm text-gray-800 whitespace-pre-wrap'}, m.text)
+                                    e('div', {className: 'bg-gray-50 rounded p-3 max-h-48 overflow-y-auto text-sm text-gray-800 whitespace-pre-wrap mb-4 flex-grow'}, m.text),
+                                    e('div', {className: 'space-y-2'},
+                                        dims.map(function(d) {
+                                            return e('div', {key: d},
+                                                e('label', {className: 'text-xs font-bold text-gray-700 block mb-1'}, d.charAt(0).toUpperCase() + d.slice(1)),
+                                                e('select', {
+                                                    value: rData[d] || '',
+                                                    onChange: function(e) { save(mi, d, e.target.value); },
+                                                    className: 'w-full px-2 py-1 border border-gray-300 rounded text-sm'
+                                                },
+                                                    e('option', {value: ''}, '—'),
+                                                    [1, 2, 3, 4, 5].map(function(s) {
+                                                        return e('option', {key: s, value: s}, s);
+                                                    })
+                                                )
+                                            );
+                                        })
+                                    )
                                 );
                             })
                         ),
                         e('div', {className: 'bg-white rounded-lg shadow-lg p-6 mb-6'},
-                            e('h3', {className: 'font-bold text-lg mb-4'}, 'Rate Each Response'),
-                            e('div', {className: 'overflow-x-auto'},
-                                e('table', {className: 'w-full text-sm'},
-                                    e('thead', null,
-                                        e('tr', {className: 'bg-gray-100 border-b'},
-                                            e('th', {className: 'text-left p-2 font-bold'}, 'Response'),
-                                            dims.map(function(d) {
-                                                return e('th', {key: d, className: 'text-left p-2 font-bold'}, d.charAt(0).toUpperCase() + d.slice(1));
-                                            })
-                                        )
-                                    ),
-                                    e('tbody', null,
-                                        q.models.map(function(m, mi) {
-                                            var rData = (qRating.responses && qRating.responses[mi]) || {};
-                                            return e('tr', {key: m.letter, className: 'border-b hover:bg-gray-50'},
-                                                e('td', {className: 'p-2 font-bold'}, m.letter),
-                                                dims.map(function(d) {
-                                                    return e('td', {key: d, className: 'p-2'},
-                                                        e('select', {
-                                                            value: rData[d] || '',
-                                                            onChange: function(e) { save(mi, d, e.target.value); },
-                                                            className: 'w-full px-2 py-1 border border-gray-300 rounded text-sm'
-                                                        },
-                                                            e('option', {value: ''}, '—'),
-                                                            [1, 2, 3, 4, 5].map(function(s) {
-                                                                return e('option', {key: s, value: s}, s);
-                                                            })
-                                                        )
-                                                    );
-                                                })
-                                            );
-                                        })
-                                    )
-                                )
-                            )
-                        ),
-                        e('div', {className: 'bg-white rounded-lg shadow-lg p-6 mb-6'},
                             e('h3', {className: 'font-bold text-lg mb-4'}, 'Which Response is Best?'),
-                            e('div', {className: 'flex gap-3'},
+                            e('div', {className: 'grid grid-cols-4 gap-2'},
                                 ['A', 'B', 'C', 'D'].map(function(letter) {
                                     return e('button', {
                                         key: letter,
                                         onClick: function() { saveBest(letter); },
-                                        className: 'flex-1 py-3 rounded-lg font-bold text-lg transition ' + (qRating.best === letter ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-900 hover:bg-gray-300')
+                                        className: 'py-3 rounded-lg font-bold text-lg transition ' + (qRating.best === letter ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-900 hover:bg-gray-300')
                                     }, letter);
                                 })
                             )
                         ),
-                        e('button', {onClick: isLast ? exportCSV : next, className: 'w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg'}, isLast ? '✓ Complete & Export' : 'Next Question →')
+                        e('button', {onClick: isLast ? exportCSV : next, className: 'w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mb-6'}, isLast ? '✓ Complete & Export' : 'Next Question →')
                     )
                 );
             }
