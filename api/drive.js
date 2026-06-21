@@ -27,8 +27,6 @@ module.exports = async (req, res) => {
 
   try {
     if (req.method === 'GET') {
-      const { google } = require('googleapis');
-      
       const auth = new google.auth.JWT(
         SERVICE_ACCOUNT.client_email,
         null,
@@ -38,32 +36,31 @@ module.exports = async (req, res) => {
 
       const drive = google.drive({ version: 'v3', auth });
 
-      // Find the CSV file
-      const fileList = await drive.files.list({
+      // Find CSV file
+      const files = await drive.files.list({
         q: `name='${CSV_FILENAME}' and '${FOLDER_ID}' in parents and trashed=false`,
         spaces: 'drive',
-        fields: 'files(id, name)',
+        fields: 'files(id)',
       });
 
-      if (!fileList.data.files || fileList.data.files.length === 0) {
-        return res.status(404).json({ error: `File ${CSV_FILENAME} not found` });
+      if (!files.data.files || files.data.files.length === 0) {
+        return res.status(404).json({ error: 'CSV file not found' });
       }
 
-      const fileId = fileList.data.files[0].id;
+      const fileId = files.data.files[0].id;
 
-      // Get the file content
-      const fileContent = await drive.files.get(
+      // Get file content as buffer, then convert to string
+      const result = await drive.files.get(
         { fileId, alt: 'media' },
-        { responseType: 'text' }
+        { responseType: 'arraybuffer' }
       );
 
-      const csvText = fileContent.data;
+      const csvText = Buffer.from(result.data).toString('utf-8');
 
       return res.status(200).json({ csv: csvText });
     }
 
     if (req.method === 'POST') {
-      const { google } = require('googleapis');
       const { fileName, csvContent } = req.body;
 
       const auth = new google.auth.JWT(
@@ -76,31 +73,29 @@ module.exports = async (req, res) => {
       const drive = google.drive({ version: 'v3', auth });
 
       // Find Results folder
-      const folderList = await drive.files.list({
+      const folders = await drive.files.list({
         q: `name='Results' and '${FOLDER_ID}' in parents and trashed=false`,
         spaces: 'drive',
         fields: 'files(id)',
       });
 
-      const resultsFolderId = folderList.data.files && folderList.data.files[0] 
-        ? folderList.data.files[0].id 
-        : FOLDER_ID;
+      const resultsFolderId = folders.data.files?.[0]?.id || FOLDER_ID;
 
-      // Check if file exists
-      const fileList = await drive.files.list({
+      // Check if result file exists
+      const existing = await drive.files.list({
         q: `name='${fileName}' and '${resultsFolderId}' in parents and trashed=false`,
         spaces: 'drive',
         fields: 'files(id)',
       });
 
-      if (fileList.data.files && fileList.data.files.length > 0) {
-        // Update
+      if (existing.data.files?.[0]) {
+        // Update existing
         await drive.files.update({
-          fileId: fileList.data.files[0].id,
+          fileId: existing.data.files[0].id,
           media: { mimeType: 'text/csv', body: csvContent }
         });
       } else {
-        // Create
+        // Create new
         await drive.files.create({
           requestBody: {
             name: fileName,
@@ -116,7 +111,7 @@ module.exports = async (req, res) => {
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('API Error:', error.message);
     return res.status(500).json({ error: error.message });
   }
 };
