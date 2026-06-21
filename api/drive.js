@@ -31,84 +31,97 @@ async function getAuthClient() {
 }
 
 async function getFileIdByName(fileName) {
-  const auth = await getAuthClient();
-  const drive = google.drive({ version: 'v3', auth });
-  
-  const res = await drive.files.list({
-    q: `name='${fileName}' and '${FOLDER_ID}' in parents and trashed=false`,
-    spaces: 'drive',
-    fields: 'files(id, name)',
-  });
-  
-  if (res.data.files.length === 0) {
-    throw new Error(`File ${fileName} not found`);
+  try {
+    const auth = await getAuthClient();
+    const drive = google.drive({ version: 'v3', auth });
+    
+    const res = await drive.files.list({
+      q: `name='${fileName}' and '${FOLDER_ID}' in parents and trashed=false`,
+      spaces: 'drive',
+      fields: 'files(id, name)',
+    });
+    
+    if (!res.data.files || res.data.files.length === 0) {
+      throw new Error(`File ${fileName} not found in Drive`);
+    }
+    return res.data.files[0].id;
+  } catch (err) {
+    console.error('getFileIdByName error:', err);
+    throw err;
   }
-  return res.data.files[0].id;
 }
 
 async function readCSV() {
-  const auth = await getAuthClient();
-  const drive = google.drive({ version: 'v3', auth });
-  
-  const fileId = await getFileIdByName(CSV_FILENAME);
-  
-  const res = await drive.files.get({
-    fileId: fileId,
-    alt: 'media'
-  }, { responseType: 'stream' });
-  
-  return new Promise((resolve, reject) => {
-    let data = '';
-    res.data.on('data', chunk => { data += chunk; });
-    res.data.on('end', () => { resolve(data); });
-    res.data.on('error', reject);
-  });
-}
-
-async function saveResults(fileName, csvContent) {
-  const auth = await getAuthClient();
-  const drive = google.drive({ version: 'v3', auth });
-  
-  const resultsFolder = FOLDER_ID;
-  
-  const folderRes = await drive.files.list({
-    q: `name='Results' and '${FOLDER_ID}' in parents and trashed=false and mimeType='application/vnd.google-apps.folder'`,
-    spaces: 'drive',
-    fields: 'files(id)',
-  });
-  
-  const resultsFolderId = folderRes.data.files[0]?.id || FOLDER_ID;
-  
-  const fileRes = await drive.files.list({
-    q: `name='${fileName}' and '${resultsFolderId}' in parents and trashed=false`,
-    spaces: 'drive',
-    fields: 'files(id)',
-  });
-  
-  if (fileRes.data.files.length > 0) {
-    await drive.files.update({
-      fileId: fileRes.data.files[0].id,
-      media: {
-        mimeType: 'text/csv',
-        body: csvContent
-      }
+  try {
+    const auth = await getAuthClient();
+    const drive = google.drive({ version: 'v3', auth });
+    
+    const fileId = await getFileIdByName(CSV_FILENAME);
+    
+    const res = await drive.files.get({
+      fileId: fileId,
+      alt: 'media'
+    }, { responseType: 'stream' });
+    
+    return new Promise((resolve, reject) => {
+      let data = '';
+      res.data.on('data', chunk => { data += chunk; });
+      res.data.on('end', () => { resolve(data); });
+      res.data.on('error', reject);
     });
-  } else {
-    await drive.files.create({
-      requestBody: {
-        name: fileName,
-        mimeType: 'text/csv',
-        parents: [resultsFolderId]
-      },
-      media: {
-        mimeType: 'text/csv',
-        body: csvContent
-      }
-    });
+  } catch (err) {
+    console.error('readCSV error:', err);
+    throw err;
   }
 }
 
-export default async function handler(req, res) {
+async function saveResults(fileName, csvContent) {
+  try {
+    const auth = await getAuthClient();
+    const drive = google.drive({ version: 'v3', auth });
+    
+    const folderRes = await drive.files.list({
+      q: `name='Results' and '${FOLDER_ID}' in parents and trashed=false and mimeType='application/vnd.google-apps.folder'`,
+      spaces: 'drive',
+      fields: 'files(id)',
+    });
+    
+    const resultsFolderId = folderRes.data.files && folderRes.data.files[0] ? folderRes.data.files[0].id : FOLDER_ID;
+    
+    const fileRes = await drive.files.list({
+      q: `name='${fileName}' and '${resultsFolderId}' in parents and trashed=false`,
+      spaces: 'drive',
+      fields: 'files(id)',
+    });
+    
+    if (fileRes.data.files && fileRes.data.files.length > 0) {
+      await drive.files.update({
+        fileId: fileRes.data.files[0].id,
+        media: {
+          mimeType: 'text/csv',
+          body: csvContent
+        }
+      });
+    } else {
+      await drive.files.create({
+        requestBody: {
+          name: fileName,
+          mimeType: 'text/csv',
+          parents: [resultsFolderId]
+        },
+        media: {
+          mimeType: 'text/csv',
+          body: csvContent
+        }
+      });
+    }
+  } catch (err) {
+    console.error('saveResults error:', err);
+    throw err;
+  }
+}
+
+module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -122,7 +135,7 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const csv = await readCSV();
-      return res.status(200).json({ csv });
+      return res.status(200).json({ csv: csv });
     }
 
     if (req.method === 'POST') {
@@ -133,7 +146,7 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: error.message });
+    console.error('Handler error:', error);
+    return res.status(500).json({ error: error.message || 'Unknown error' });
   }
-}
+};
