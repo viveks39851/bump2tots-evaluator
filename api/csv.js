@@ -4,7 +4,7 @@ const CREDENTIALS = {
     type: "service_account",
     project_id: "bump2tots-evaluator",
     private_key_id: "793d766ee404df55c97b559aaabc0023a2cddd42",
-    private_key: process.env.GOOGLE_PRIVATE_KEY,
+    private_key: (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
     client_email: "id-bump2tots-evaluator@bump2tots-evaluator.iam.gserviceaccount.com",
     client_id: "116960397266797279873",
     auth_uri: "https://accounts.google.com/o/oauth2/auth",
