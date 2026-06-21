@@ -148,11 +148,15 @@
             const [loading, setLoading] = useState(false);
 
             function loadCSV() {
-                setLoading(true);
-                fetch('/api/drive')
-                    .then(r => r.json())
-                    .then(data => {
-                        var rows = parseCSVProperly(data.csv);
+    setLoading(true);
+    fetch('/api/drive')
+        .then(r => r.json())
+        .then(data => {
+            console.log('API Response:', data);
+            if (!data.csv) {
+                throw new Error('API did not return CSV data. Got: ' + JSON.stringify(data));
+            }
+            var rows = parseCSVProperly(data.csv);
                         var header = rows[0];
                         var qIdx = -1, sIdx = -1, gIdx = -1, geIdx = -1, cIdx = -1, bIdx = -1;
                         
