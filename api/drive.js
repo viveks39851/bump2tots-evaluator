@@ -16,137 +16,107 @@ const SERVICE_ACCOUNT = {
 const FOLDER_ID = "1ForkYtMiAmwsqbHAwjAQLwYZwLR51I22";
 const CSV_FILENAME = "all-AI-Answer-ComparisonVVS.csv";
 
-let authClient = null;
-
-async function getAuthClient() {
-  if (authClient) return authClient;
-  authClient = new google.auth.JWT(
-    SERVICE_ACCOUNT.client_email,
-    null,
-    SERVICE_ACCOUNT.private_key,
-    ['https://www.googleapis.com/auth/drive']
-  );
-  await authClient.authorize();
-  return authClient;
-}
-
-async function getFileIdByName(fileName) {
-  try {
-    const auth = await getAuthClient();
-    const drive = google.drive({ version: 'v3', auth });
-    
-    const res = await drive.files.list({
-      q: `name='${fileName}' and '${FOLDER_ID}' in parents and trashed=false`,
-      spaces: 'drive',
-      fields: 'files(id, name)',
-    });
-    
-    if (!res.data.files || res.data.files.length === 0) {
-      throw new Error(`File ${fileName} not found in Drive`);
-    }
-    return res.data.files[0].id;
-  } catch (err) {
-    console.error('getFileIdByName error:', err);
-    throw err;
-  }
-}
-
-async function readCSV() {
-  try {
-    const auth = await getAuthClient();
-    const drive = google.drive({ version: 'v3', auth });
-    
-    const fileId = await getFileIdByName(CSV_FILENAME);
-    
-    const res = await drive.files.get({
-      fileId: fileId,
-      alt: 'media'
-    }, { responseType: 'stream' });
-    
-    return new Promise((resolve, reject) => {
-      let data = '';
-      res.data.on('data', chunk => { data += chunk; });
-      res.data.on('end', () => { resolve(data); });
-      res.data.on('error', reject);
-    });
-  } catch (err) {
-    console.error('readCSV error:', err);
-    throw err;
-  }
-}
-
-async function saveResults(fileName, csvContent) {
-  try {
-    const auth = await getAuthClient();
-    const drive = google.drive({ version: 'v3', auth });
-    
-    const folderRes = await drive.files.list({
-      q: `name='Results' and '${FOLDER_ID}' in parents and trashed=false and mimeType='application/vnd.google-apps.folder'`,
-      spaces: 'drive',
-      fields: 'files(id)',
-    });
-    
-    const resultsFolderId = folderRes.data.files && folderRes.data.files[0] ? folderRes.data.files[0].id : FOLDER_ID;
-    
-    const fileRes = await drive.files.list({
-      q: `name='${fileName}' and '${resultsFolderId}' in parents and trashed=false`,
-      spaces: 'drive',
-      fields: 'files(id)',
-    });
-    
-    if (fileRes.data.files && fileRes.data.files.length > 0) {
-      await drive.files.update({
-        fileId: fileRes.data.files[0].id,
-        media: {
-          mimeType: 'text/csv',
-          body: csvContent
-        }
-      });
-    } else {
-      await drive.files.create({
-        requestBody: {
-          name: fileName,
-          mimeType: 'text/csv',
-          parents: [resultsFolderId]
-        },
-        media: {
-          mimeType: 'text/csv',
-          body: csvContent
-        }
-      });
-    }
-  } catch (err) {
-    console.error('saveResults error:', err);
-    throw err;
-  }
-}
-
 module.exports = async (req, res) => {
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
 
   try {
     if (req.method === 'GET') {
-      const csv = await readCSV();
-      return res.status(200).json({ csv: csv });
+      const { google } = require('googleapis');
+      
+      const auth = new google.auth.JWT(
+        SERVICE_ACCOUNT.client_email,
+        null,
+        SERVICE_ACCOUNT.private_key,
+        ['https://www.googleapis.com/auth/drive']
+      );
+
+      const drive = google.drive({ version: 'v3', auth });
+
+      // Find the CSV file
+      const fileList = await drive.files.list({
+        q: `name='${CSV_FILENAME}' and '${FOLDER_ID}' in parents and trashed=false`,
+        spaces: 'drive',
+        fields: 'files(id, name)',
+      });
+
+      if (!fileList.data.files || fileList.data.files.length === 0) {
+        return res.status(404).json({ error: `File ${CSV_FILENAME} not found` });
+      }
+
+      const fileId = fileList.data.files[0].id;
+
+      // Get the file content
+      const fileContent = await drive.files.get(
+        { fileId, alt: 'media' },
+        { responseType: 'text' }
+      );
+
+      const csvText = fileContent.data;
+
+      return res.status(200).json({ csv: csvText });
     }
 
     if (req.method === 'POST') {
+      const { google } = require('googleapis');
       const { fileName, csvContent } = req.body;
-      await saveResults(fileName, csvContent);
+
+      const auth = new google.auth.JWT(
+        SERVICE_ACCOUNT.client_email,
+        null,
+        SERVICE_ACCOUNT.private_key,
+        ['https://www.googleapis.com/auth/drive']
+      );
+
+      const drive = google.drive({ version: 'v3', auth });
+
+      // Find Results folder
+      const folderList = await drive.files.list({
+        q: `name='Results' and '${FOLDER_ID}' in parents and trashed=false`,
+        spaces: 'drive',
+        fields: 'files(id)',
+      });
+
+      const resultsFolderId = folderList.data.files && folderList.data.files[0] 
+        ? folderList.data.files[0].id 
+        : FOLDER_ID;
+
+      // Check if file exists
+      const fileList = await drive.files.list({
+        q: `name='${fileName}' and '${resultsFolderId}' in parents and trashed=false`,
+        spaces: 'drive',
+        fields: 'files(id)',
+      });
+
+      if (fileList.data.files && fileList.data.files.length > 0) {
+        // Update
+        await drive.files.update({
+          fileId: fileList.data.files[0].id,
+          media: { mimeType: 'text/csv', body: csvContent }
+        });
+      } else {
+        // Create
+        await drive.files.create({
+          requestBody: {
+            name: fileName,
+            mimeType: 'text/csv',
+            parents: [resultsFolderId]
+          },
+          media: { mimeType: 'text/csv', body: csvContent }
+        });
+      }
+
       return res.status(200).json({ success: true });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
-    console.error('Handler error:', error);
-    return res.status(500).json({ error: error.message || 'Unknown error' });
+    console.error('API Error:', error);
+    return res.status(500).json({ error: error.message });
   }
 };
