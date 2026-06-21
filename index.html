@@ -17,51 +17,56 @@
         const useState = React.useState;
 
         function parseCSVProperly(csvText) {
-            var rows = [];
-            var currentRow = [];
-            var currentCell = '';
-            var insideQuotes = false;
-            
-            for (var i = 0; i < csvText.length; i++) {
-                var char = csvText[i];
-                var nextChar = csvText[i + 1];
-                
-                if (char === '"') {
-                    if (insideQuotes && nextChar === '"') {
-                        currentCell += '"';
-                        i++;
-                    } else {
-                        insideQuotes = !insideQuotes;
-                    }
-                } else if (char === ',' && !insideQuotes) {
-                    currentRow.push(currentCell.trim());
-                    currentCell = '';
-                } else if ((char === '\n' || char === '\r') && !insideQuotes) {
-                    if (currentCell || currentRow.length > 0) {
-                        currentRow.push(currentCell.trim());
-                        if (currentRow.some(function(c) { return c.length > 0; })) {
-                            rows.push(currentRow);
-                        }
-                        currentRow = [];
-                        currentCell = '';
-                    }
-                    if (char === '\r' && nextChar === '\n') {
-                        i++;
-                    }
-                } else {
-                    currentCell += char;
-                }
+    // Remove BOM if present
+    if (csvText.charCodeAt(0) === 0xFEFF) {
+        csvText = csvText.slice(1);
+    }
+    
+    var rows = [];
+    var currentRow = [];
+    var currentCell = '';
+    var insideQuotes = false;
+    
+    for (var i = 0; i < csvText.length; i++) {
+        var char = csvText[i];
+        var nextChar = csvText[i + 1];
+        
+        if (char === '"') {
+            if (insideQuotes && nextChar === '"') {
+                currentCell += '"';
+                i++;
+            } else {
+                insideQuotes = !insideQuotes;
             }
-            
-            if (currentCell || currentRow.length > 0) {
+        } else if (char === ',' && !insideQuotes) {
+            currentRow.push(currentCell.trim());
+            currentCell = '';
+        } else if ((char === '\n' || char === '\r') && !insideQuotes) {
+            if (currentCell.length > 0 || currentRow.length > 0) {
                 currentRow.push(currentCell.trim());
                 if (currentRow.some(function(c) { return c.length > 0; })) {
                     rows.push(currentRow);
                 }
+                currentRow = [];
+                currentCell = '';
             }
-            
-            return rows;
+            if (char === '\r' && nextChar === '\n') {
+                i++;
+            }
+        } else {
+            currentCell += char;
         }
+    }
+    
+    if (currentCell.length > 0 || currentRow.length > 0) {
+        currentRow.push(currentCell.trim());
+        if (currentRow.some(function(c) { return c.length > 0; })) {
+            rows.push(currentRow);
+        }
+    }
+    
+    return rows;
+}
 
         function VoiceRecorder(props) {
             const [isRecording, setIsRecording] = useState(false);
