@@ -294,7 +294,6 @@
                 var evaluated = Object.keys(ratings).length;
                 var progress = Math.round((evaluated / total) * 100);
                 var dims = ['accuracy', 'clarity', 'safety', 'actionability', 'empathy'];
-                var dimAbbrev = {accuracy: 'Acc', clarity: 'Cla', safety: 'Saf', actionability: 'Act', empathy: 'Emp'};
                 var ratingLabels = {
                     accuracy: ['Poor', 'Fair', 'Good', 'Very Good', 'Excellent'],
                     clarity: ['Unclear', 'Somewhat Clear', 'Clear', 'Very Clear', 'Crystal Clear'],
@@ -326,18 +325,18 @@
                                 return e('div', {key: m.letter, className: 'bg-white rounded-lg shadow-lg p-4 border-2 border-gray-200 flex flex-col'},
                                     e('h4', {className: 'font-bold text-lg mb-3 text-center bg-gray-100 py-2 rounded'}, 'Response ' + m.letter),
                                     e('div', {className: 'bg-gray-50 rounded p-3 text-sm text-gray-800 whitespace-pre-wrap mb-4 flex-grow'}, m.text),
-                                    e('div', {className: 'grid grid-cols-5 gap-1 mt-auto'},
+                                    e('div', {className: 'space-y-2 mt-auto'},
                                         dims.map(function(d) {
-                                            return e('div', {key: d, className: 'flex flex-col'},
-                                                e('label', {className: 'text-xs font-bold text-gray-700 block mb-1'}, dimAbbrev[d]),
+                                            return e('div', {key: d},
+                                                e('label', {className: 'text-xs font-bold text-gray-700 block mb-1'}, d.charAt(0).toUpperCase() + d.slice(1)),
                                                 e('select', {
                                                     value: rData[d] || '',
                                                     onChange: function(e) { save(mi, d, e.target.value); },
-                                                    className: 'w-full px-1 py-1 border border-gray-300 rounded text-xs'
+                                                    className: 'w-full px-2 py-1 border border-gray-300 rounded text-sm'
                                                 },
                                                     e('option', {value: ''}, '—'),
                                                     [1, 2, 3, 4, 5].map(function(s) {
-                                                        return e('option', {key: s, value: s}, s);
+                                                        return e('option', {key: s, value: s}, s + ' - ' + ratingLabels[d][s - 1]);
                                                     })
                                                 )
                                             );
