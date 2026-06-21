@@ -77,13 +77,10 @@
                     recog.lang = 'en-US';
                     
                     recog.onresult = function(event) {
-                        var interim = '';
                         for (var i = event.resultIndex; i < event.results.length; i++) {
                             var t = event.results[i][0].transcript;
                             if (event.results[i].isFinal) {
                                 setTranscript(function(prev) { return prev + ' ' + t; });
-                            } else {
-                                interim += t;
                             }
                         }
                     };
@@ -148,73 +145,71 @@
             const [questions, setQuestions] = useState(null);
             const [qIdx, setQIdx] = useState(0);
             const [ratings, setRatings] = useState({});
+            const [loading, setLoading] = useState(false);
 
-            function handleUpload(ev) {
-                var file = ev.target.files[0];
-                if (!file) return;
-                var reader = new FileReader();
-                reader.onload = function(e2) {
-                    var csv = e2.target.result;
-                    var rows = parseCSVProperly(csv);
-                    
-                    if (rows.length < 2) {
-                        alert('Invalid CSV');
-                        return;
-                    }
+            function loadCSV() {
+                setLoading(true);
+                fetch('/api/drive')
+                    .then(r => r.json())
+                    .then(data => {
+                        var rows = parseCSVProperly(data.csv);
+                        var header = rows[0];
+                        var qIdx = -1, sIdx = -1, gIdx = -1, geIdx = -1, cIdx = -1, bIdx = -1;
+                        
+                        for (var i = 0; i < header.length; i++) {
+                            var h = header[i].toLowerCase();
+                            if (h.includes('question')) qIdx = i;
+                            if (h.includes('speciality')) sIdx = i;
+                            if (h.includes('gpt')) gIdx = i;
+                            if (h.includes('gemini')) geIdx = i;
+                            if (h.includes('claude')) cIdx = i;
+                            if (h.includes('bump2tots')) bIdx = i;
+                        }
 
-                    var header = rows[0];
-                    var qIdx = -1, sIdx = -1, gIdx = -1, geIdx = -1, cIdx = -1, bIdx = -1;
-                    
-                    for (var i = 0; i < header.length; i++) {
-                        var h = header[i].toLowerCase();
-                        if (h.includes('question')) qIdx = i;
-                        if (h.includes('speciality')) sIdx = i;
-                        if (h.includes('gpt')) gIdx = i;
-                        if (h.includes('gemini')) geIdx = i;
-                        if (h.includes('claude')) cIdx = i;
-                        if (h.includes('bump2tots')) bIdx = i;
-                    }
-
-                    if (qIdx < 0 || sIdx < 0 || gIdx < 0 || geIdx < 0 || cIdx < 0 || bIdx < 0) {
-                        alert('Missing columns');
-                        return;
-                    }
-
-                    var parsed = rows.slice(1).map(function(cells, idx) {
-                        var models = [
-                            { name: 'ChatGPT', text: cells[gIdx] || '' },
-                            { name: 'Gemini', text: cells[geIdx] || '' },
-                            { name: 'Claude', text: cells[cIdx] || '' },
-                            { name: 'Bump2Tots', text: cells[bIdx] || '' }
-                        ];
-                        models.sort(function() { return Math.random() - 0.5; });
-                        return {
-                            qNum: idx + 1,
-                            question: cells[qIdx] || '',
-                            spec: cells[sIdx] || '',
-                            models: models.map(function(m, i) {
-                                return {
-                                    letter: String.fromCharCode(65 + i),
-                                    name: m.name,
-                                    text: m.text
-                                };
-                            })
-                        };
+                        var parsed = rows.slice(1).map(function(cells, idx) {
+                            var models = [
+                                { name: 'ChatGPT', text: cells[gIdx] || '' },
+                                { name: 'Gemini', text: cells[geIdx] || '' },
+                                { name: 'Claude', text: cells[cIdx] || '' },
+                                { name: 'Bump2Tots', text: cells[bIdx] || '' }
+                            ];
+                            models.sort(function() { return Math.random() - 0.5; });
+                            return {
+                                qNum: idx + 1,
+                                question: cells[qIdx] || '',
+                                spec: cells[sIdx] || '',
+                                models: models.map(function(m, i) {
+                                    return {
+                                        letter: String.fromCharCode(65 + i),
+                                        name: m.name,
+                                        text: m.text
+                                    };
+                                })
+                            };
+                        });
+                        setQuestions(parsed);
+                        setLoading(false);
+                    })
+                    .catch(err => {
+                        alert('Error loading CSV: ' + err.message);
+                        setLoading(false);
                     });
-                    setQuestions(parsed);
-                };
-                reader.readAsText(file);
             }
+
+            React.useEffect(loadCSV, []);
 
             if (stage === 'setup') {
                 var specs = ['OB/MFM', 'Peds/Neo'];
                 return e('div', {className: 'min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6'},
                     e('div', {className: 'max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-8'},
                         e('h1', {className: 'text-3xl font-bold text-gray-900 mb-6'}, 'Bump2Tots Evaluator'),
-                        !questions ? 
-                            e('label', {className: 'block'},
-                                e('div', {className: 'bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg cursor-pointer text-center'}, '📁 Upload CSV'),
-                                e('input', {type: 'file', accept: '.csv', onChange: handleUpload, className: 'hidden'})
+                        loading ? 
+                            e('div', {className: 'text-center py-8'},
+                                e('p', {className: 'text-lg text-gray-600'}, 'Loading evaluation questions from Google Drive...')
+                            )
+                        : !questions ?
+                            e('div', {className: 'text-center py-8'},
+                                e('p', {className: 'text-lg text-red-600'}, 'Error loading questions')
                             )
                         :
                             e('div', {className: 'space-y-6'},
@@ -279,6 +274,7 @@
                 }
 
                 function completeEval() {
+                    setLoading(true);
                     var rows = [];
                     filtered.forEach(function(q, qi) {
                         q.models.forEach(function(m, mi) {
@@ -290,13 +286,24 @@
                     });
                     var header = ['Evaluator', 'Specialty', 'Question#', 'Question', 'Model', 'Accuracy', 'Clarity', 'Safety', 'Actionability', 'Empathy', 'Clinical Notes', 'Best'];
                     var csv = [header].concat(rows).map(function(r) { return r.join(','); }).join('\n');
-                    var blob = new Blob([csv], {type: 'text/csv'});
-                    var url = URL.createObjectURL(blob);
-                    var a = document.createElement('a');
-                    a.href = url;
-                    a.download = spec + '_' + name + '_results.csv';
-                    a.click();
-                    setStage('complete');
+                    
+                    fetch('/api/drive', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            fileName: spec + '_' + name + '_results.csv',
+                            csvContent: csv
+                        })
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        setLoading(false);
+                        setStage('complete');
+                    })
+                    .catch(err => {
+                        alert('Error saving: ' + err.message);
+                        setLoading(false);
+                    });
                 }
 
                 var isLast = qIdx === filtered.length - 1;
@@ -370,7 +377,7 @@
                                 })
                             ) : null
                         ),
-                        e('button', {onClick: isLast ? completeEval : next, className: 'w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mb-6'}, isLast ? '✓ Complete & Export' : 'Next Question →')
+                        e('button', {onClick: isLast ? completeEval : next, disabled: loading, className: 'w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mb-6 disabled:bg-gray-400'}, loading ? '⏳ Saving...' : (isLast ? '✓ Complete & Save to Google Drive' : 'Next Question →'))
                     )
                 );
             }
@@ -384,20 +391,12 @@
                             e('p', {className: 'text-lg text-gray-700'}, 'Thank you for your thorough evaluation.')
                         ),
                         e('div', {className: 'bg-green-50 border-2 border-green-200 rounded-lg p-6 mb-6'},
-                            e('h2', {className: 'font-bold text-lg text-gray-900 mb-2'}, '📥 File Downloaded'),
+                            e('h2', {className: 'font-bold text-lg text-gray-900 mb-2'}, '📁 Results Saved to Google Drive'),
                             e('p', {className: 'text-gray-800 font-mono bg-gray-100 p-3 rounded'}, filename),
-                            e('p', {className: 'text-sm text-gray-600 mt-2'}, 'This file is saved in your Downloads folder.')
+                            e('p', {className: 'text-sm text-gray-600 mt-2'}, 'Your evaluation results have been automatically saved to the Results folder in Google Drive.')
                         ),
                         e('div', {className: 'bg-blue-50 border-2 border-blue-200 rounded-lg p-6 mb-6'},
-                            e('h2', {className: 'font-bold text-lg text-gray-900 mb-3'}, '📧 Next Steps'),
-                            e('ol', {className: 'list-decimal list-inside space-y-2 text-gray-800'},
-                                e('li', null, e('span', {className: 'font-bold'}, 'Email this file to: '), e('span', {className: 'font-mono text-blue-600'}, 'vshukla@uabmc.edu')),
-                                e('li', null, e('span', {className: 'font-bold'}, 'Subject: '), e('span', null, spec + ' Evaluation Results - ' + name)),
-                                e('li', null, 'Include your name and specialty in the email')
-                            )
-                        ),
-                        e('div', {className: 'bg-gray-50 border-2 border-gray-200 rounded-lg p-6 mb-6'},
-                            e('h2', {className: 'font-bold text-lg text-gray-900 mb-3'}, '📋 What Happens Next'),
+                            e('h2', {className: 'font-bold text-lg text-gray-900 mb-3'}, '✨ What Happens Next'),
                             e('ul', {className: 'space-y-2 text-gray-800'},
                                 e('li', null, '✓ All evaluator responses will be collected'),
                                 e('li', null, '✓ Ratings will be aggregated across evaluators'),
