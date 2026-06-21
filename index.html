@@ -132,6 +132,7 @@
             const [qIdx, setQIdx] = useState(0);
             const [ratings, setRatings] = useState({});
             const [loading, setLoading] = useState(false);
+            const [saveError, setSaveError] = useState(null);
             function loadCSV() {
                 setLoading(true);
                 const csvUrl = '/api/csv';
@@ -254,6 +255,7 @@
                 }
                 function completeEval() {
                     setLoading(true);
+                    setSaveError(null);
                     var rows = [];
                     filtered.forEach(function(q, qi) {
                         q.models.forEach(function(m, mi) {
@@ -265,14 +267,27 @@
                     });
                     var header = ['Evaluator', 'Specialty', 'Question#', 'Question', 'Model', 'Accuracy', 'Clarity', 'Safety', 'Actionability', 'Empathy', 'Clinical Notes', 'Best'];
                     var csv = [header].concat(rows).map(function(r) { return r.join(','); }).join('\n');
-                    var blob = new Blob([csv], {type: 'text/csv'});
-                    var url = URL.createObjectURL(blob);
-                    var a = document.createElement('a');
-                    a.href = url;
-                    a.download = spec + '_' + name + '_results.csv';
-                    a.click();
-                    setLoading(false);
-                    setStage('complete');
+                    var filename = spec + '_' + name + '_results.csv';
+                    
+                    fetch('/api/save-results', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filename: filename, csv: csv })
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            setLoading(false);
+                            setStage('complete');
+                        } else {
+                            throw new Error(data.error || 'Unknown error');
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Save error:', err);
+                        setSaveError(err.message);
+                        setLoading(false);
+                    });
                 }
                 var isLast = qIdx === filtered.length - 1;
                 var total = filtered.length;
@@ -350,29 +365,33 @@
                                 })
                             ) : null
                         ),
-                        e('button', {onClick: isLast ? completeEval : next, disabled: loading, className: 'w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mb-6 disabled:bg-gray-400'}, loading ? '⏳ Saving...' : (isLast ? '✓ Complete & Download' : 'Next Question →'))
+                        saveError ? e('div', {className: 'bg-red-50 border border-red-200 rounded-lg p-4 mb-4'},
+                            e('p', {className: 'text-red-800 font-bold'}, '❌ Error saving results:'),
+                            e('p', {className: 'text-red-700 text-sm'}, saveError)
+                        ) : null,
+                        e('button', {onClick: isLast ? completeEval : next, disabled: loading, className: 'w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mb-6 disabled:bg-gray-400'}, loading ? '⏳ Saving to Drive...' : (isLast ? '✓ Complete & Save' : 'Next Question →'))
                     )
                 );
             }
             if (stage === 'complete') {
-                var filename = spec + '_' + name + '_results.csv';
                 return e('div', {className: 'min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6'},
                     e('div', {className: 'max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-8'},
                         e('div', {className: 'text-center mb-8'},
-                            e('h1', {className: 'text-4xl font-bold text-green-600 mb-2'}, '✓ Evaluation Complete!'),
+                            e('h1', {className: 'text-4xl font-bold text-green-600 mb-2'}, '✅ Evaluation Complete!'),
                             e('p', {className: 'text-lg text-gray-700'}, 'Thank you for your thorough evaluation.')
                         ),
                         e('div', {className: 'bg-green-50 border-2 border-green-200 rounded-lg p-6 mb-6'},
-                            e('h2', {className: 'font-bold text-lg text-gray-900 mb-2'}, '📥 Results Downloaded'),
-                            e('p', {className: 'text-gray-800 font-mono bg-gray-100 p-3 rounded'}, filename),
-                            e('p', {className: 'text-sm text-gray-600 mt-2'}, 'Your evaluation results have been downloaded to your computer.')
+                            e('h2', {className: 'font-bold text-lg text-gray-900 mb-2'}, '📁 Results Saved to Google Drive'),
+                            e('p', {className: 'text-gray-800 font-mono bg-gray-100 p-3 rounded mb-2'}, spec + '_' + name + '_results.csv'),
+                            e('p', {className: 'text-sm text-gray-600'}, 'Your evaluation results have been automatically saved to the shared Results folder in Google Drive.')
                         ),
                         e('div', {className: 'bg-blue-50 border-2 border-blue-200 rounded-lg p-6 mb-6'},
-                            e('h2', {className: 'font-bold text-lg text-gray-900 mb-3'}, '📧 Next Steps'),
+                            e('h2', {className: 'font-bold text-lg text-gray-900 mb-3'}, '✨ What Happens Next'),
                             e('ol', {className: 'list-decimal list-inside space-y-2 text-gray-800'},
-                                e('li', null, e('span', {className: 'font-bold'}, 'Email the downloaded file to: '), e('span', {className: 'font-mono text-blue-600'}, 'vshukla@uabmc.edu')),
-                                e('li', null, e('span', {className: 'font-bold'}, 'Subject: '), e('span', null, spec + ' Evaluation Results - ' + name)),
-                                e('li', null, 'Include your name and specialty in the email')
+                                e('li', null, 'All evaluators complete their assessments'),
+                                e('li', null, 'Results are collected from the Google Drive Results folder'),
+                                e('li', null, 'Inter-rater reliability is calculated (Cohen\'s kappa)'),
+                                e('li', null, 'Model performance is analyzed and reported')
                             )
                         ),
                         e('button', {onClick: function() { setStage('setup'); setQIdx(0); setRatings({}); }, className: 'w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg'}, 'Start New Evaluation')
