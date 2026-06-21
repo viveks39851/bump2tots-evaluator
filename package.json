@@ -1,0 +1,7 @@
+{
+  "name": "bump2tots-evaluator",
+  "version": "1.0.0",
+  "dependencies": {
+    "googleapis": "^118.0.0"
+  }
+}
